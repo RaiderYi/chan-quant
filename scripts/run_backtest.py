@@ -7,11 +7,13 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import pandas as pd
 
 from chan_quant.backtest import portfolio
+from chan_quant.config import DATA
 from chan_quant.eval.bars import load_frames
+from chan_quant.eval.metrics import expectancy
 from chan_quant.models import train
 
 
-def show(tag, res):
+def show(tag, res, save_as: str | None = None):
     m = res["metrics"]
     print(f"\n== {tag} ==")
     print(f"  区间: {res['equity'].index.min()} ~ {res['equity'].index.max()}  bars={m.get('bars')}")
@@ -23,6 +25,15 @@ def show(tag, res):
     tr = res["trades"]
     if not tr.empty:
         print(tr.groupby("reason")["ret"].agg(["count", "mean"]).round(4).to_string())
+        e = expectancy(tr["ret"])
+        print(f"  期望 {e['expectancy_bp']:.1f}bp/笔  盈亏平衡 R*={e['breakeven_R']:.2f}  "
+              f"实际 R={e['payoff_R']:.2f}  Kelly={e['kelly']*100:.2f}%  "
+              f"前5%交易占总盈利 {e['top5pct_profit_share']*100:.0f}%")
+    if save_as:
+        d = DATA / "bt"
+        d.mkdir(parents=True, exist_ok=True)
+        res["trades"].to_parquet(d / f"{save_as}_trades.parquet", index=False)
+        res["equity"].to_parquet(d / f"{save_as}_equity.parquet")
 
 
 def main():
@@ -50,7 +61,8 @@ def main():
     bars = load_frames(df.code.unique())
     p = portfolio.BtParams(pos_pct=args.pos, max_pos=args.max, stop_atr=args.stop, hold_bars=args.hold)
     res = portfolio.run(df, bars, p, entry_mode=args.mode)
-    show(args.tag or f"{args.name}/{args.mode}/stop{args.stop}/hold{args.hold}", res)
+    tag = args.tag or f"{args.name}/{args.mode}/stop{args.stop}/hold{args.hold}"
+    show(tag, res, save_as=tag.replace("/", "_").replace(" ", "_"))
 
 
 if __name__ == "__main__":
