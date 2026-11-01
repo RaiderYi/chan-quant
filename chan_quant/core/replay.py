@@ -6,7 +6,7 @@ import numpy as np
 
 from chan_quant.config import chan_config
 from chan_quant.data import store
-from chan_quant.features import indicators, pa, chan_ctx, patterns, brooks, dynamics
+from chan_quant.features import indicators, pa, chan_ctx, patterns, brooks, dynamics, context
 
 
 @dataclass
@@ -99,6 +99,7 @@ def replay(code: str, freq: str = "30m", max_bsp_lookback: int = 8,
                 feats.update(brooks.pattern2_features(ind, t))
                 feats.update(chan_ctx.structure_features(lv, klu, bsp))
                 feats.update(dynamics.dynamics_features(lv, bsp))
+                feats.update(context.context_features(ind, t))
             except Exception as e:
                 skipped += 1
                 if verbose:
