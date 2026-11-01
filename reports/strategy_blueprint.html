@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>chan-quant 策略全景图 · v7+frenzy 门控（2026-11-01）</title>
+<style>
+  :root {
+    --green:#16a34a; --green-bg:#f0fdf4; --red:#dc2626; --red-bg:#fef2f2;
+    --blue:#2563eb; --blue-bg:#eff6ff; --amber:#d97706; --amber-bg:#fffbeb;
+    --gray:#64748b; --gray-bg:#f8fafc; --ink:#0f172a; --line:#cbd5e1;
+  }
+  * { box-sizing: border-box; }
+  body { font-family:"Microsoft YaHei","PingFang SC",sans-serif; margin:0; background:#fff; color:var(--ink); }
+  .page { max-width:1180px; margin:0 auto; padding:28px 20px 60px; }
+  h1 { font-size:24px; margin:0 0 6px; }
+  .sub { color:var(--gray); font-size:13px; margin-bottom:18px; }
+  .essence { background:linear-gradient(135deg,#0f172a,#1e3a5f); color:#fff; border-radius:10px;
+             padding:16px 20px; font-size:15px; line-height:1.8; margin-bottom:20px; }
+  .essence b { color:#fbbf24; }
+
+  /* 指标卡 */
+  .kpis { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:26px; }
+  .kpi { background:var(--green-bg); border:1px solid #bbf7d0; border-radius:8px; padding:10px; text-align:center; }
+  .kpi .v { font-size:20px; font-weight:700; color:var(--green); }
+  .kpi .k { font-size:11px; color:var(--gray); margin-top:2px; }
+
+  /* 流程链 */
+  .chain { display:flex; flex-direction:column; align-items:center; }
+  .stage { width:100%; display:flex; gap:14px; align-items:stretch; }
+  .badge { flex:0 0 44px; display:flex; flex-direction:column; align-items:center; }
+  .badge .num { width:34px; height:34px; border-radius:50%; color:#fff; font-weight:700;
+                display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .badge .vline { flex:1; width:2px; background:var(--line); margin-top:4px; }
+  .card { flex:1; border:1px solid var(--line); border-left-width:5px; border-radius:8px;
+          padding:12px 16px; margin-bottom:6px; background:#fff; }
+  .card h3 { margin:0 0 6px; font-size:15px; }
+  .card .body { font-size:12.5px; color:#334155; line-height:1.75; }
+  .card .ev { margin-top:6px; font-size:11px; color:var(--gray); }
+  .card .ev b { color:var(--gray); }
+  .arrow { text-align:center; color:var(--gray); font-size:18px; line-height:1; margin:0 0 6px 44px; }
+  .blue   { border-left-color:var(--blue);  background:var(--blue-bg); }
+  .blue .num { background:var(--blue); }
+  .green  { border-left-color:var(--green); background:var(--green-bg); }
+  .green .num { background:var(--green); }
+  .amber  { border-left-color:var(--amber); background:var(--amber-bg); }
+  .amber .num { background:var(--amber); }
+  .gray   { border-left-color:var(--gray);  background:var(--gray-bg); }
+  .gray .num { background:var(--gray); }
+  .red    { border-left-color:var(--red);   background:var(--red-bg); }
+  .red .num { background:var(--red); }
+
+  /* 闸门口的分叉 */
+  .fork { display:grid; grid-template-columns:1fr 1fr; gap:14px; width:100%; margin-bottom:6px; }
+  .fork .card { margin-bottom:0; }
+
+  h2 { font-size:17px; margin:34px 0 12px; padding-left:10px; border-left:4px solid var(--ink); }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; }
+  th, td { border:1px solid #e2e8f0; padding:7px 10px; text-align:left; line-height:1.6; }
+  th { background:#f1f5f9; font-size:12px; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+  .tag.ok { background:#dcfce7; color:#166534; }
+  .tag.no { background:#fee2e2; color:#991b1b; }
+  .tag.idle { background:#e2e8f0; color:#475569; }
+  .grave { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .note { font-size:12px; color:var(--gray); line-height:1.8; margin-top:8px; }
+  .footer { margin-top:30px; font-size:11px; color:#94a3b8; text-align:center; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>chan-quant 策略全景图 <span style="font-size:14px;color:#64748b">v7 + frenzy 门控 · 2026-11-01 定稿</span></h1>
+<div class="sub">数据：HS300 289 股 30m（2020-01~2026-10，baostock 前复权）· 框架：chan.py f8ca3b5 · 证据链：reports/experiment_log.md（21 条编号实验）</div>
+
+<div class="essence">
+  <b>一句话本质：</b>缠论负责"买什么"（结构买卖点），Brooks regime 负责"什么时候买"（狂热闸门），
+  固定 144bar 负责"等多久"（尾部等待窗口），ML 只负责研究、不进交易链路（5 次证伪 + 1 次组合级无效）。
+  策略 = <b>BSP 彩票 +  regime 开关</b>：平时小亏等待（中位 -242bp/笔），狂潮期满仓收割（狂潮月笔均 +1984bp）。
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="v">+79.5%</div><div class="k">OOS 2024-26 总收益</div></div>
+  <div class="kpi"><div class="v">1.21</div><div class="k">夏普（2.8 年真样本外）</div></div>
+  <div class="kpi"><div class="v">-12.3%</div><div class="k">最大回撤</div></div>
+  <div class="kpi"><div class="v">+158.8bp</div><div class="k">单笔期望 E</div></div>
+  <div class="kpi"><div class="v">31.4%</div><div class="k">胜率（R=3.8 盈亏比）</div></div>
+  <div class="kpi"><div class="v">40%</div><div class="k">开机率（60% 时间空仓）</div></div>
+</div>
+
+<!-- ═══════════ 主交易链 ═══════════ -->
+<h2>① 主交易链：从数据到成交（买点链）</h2>
+<div class="chain">
+
+  <div class="stage">
+    <div class="badge"><div class="num" style="background:var(--blue)">1</div><div class="vline"></div></div>
+    <div class="card blue">
+      <h3>数据层 · baostock 30m 前复权</h3>
+      <div class="body">HS300 289 股 × ~13,224 bar（2020-01 起，8 根/日）→ parquet 缓存；单连接限速抓取（官方禁多连接）。另有 297 股日线 2010 起（regime 压力测试用）。</div>
+      <div class="ev"><b>证据：</b>数据版本表 events_v0→v7（experiment_log.md）</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼</div>
+  <div class="stage">
+    <div class="badge"><div class="num" style="background:var(--blue)">2</div><div class="vline"></div></div>
+    <div class="card blue">
+      <h3>结构层 · chan.py 逐 bar 回放（step_load）</h3>
+      <div class="body">每根 bar 喂入框架，重算 笔 → 线段 → 中枢 → 买卖点（BSP）。<b>只记录 BSP 首次出现的那一刻</b>（事件），特征全部用 t 时点现场计算（前缀不变性 0 mismatch 验证无泄漏）。
+      同时做<b>存活追踪</b>：58% 的 BSP 会被后续 bar 清除（中位寿命买 81 bar）——"实时信号会漂移"的量化证据。</div>
+      <div class="ev"><b>证据：</b>#17 存活模型 · test_prefix_invariance.py</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼</div>
+  <div class="stage">
+    <div class="badge"><div class="num" style="background:var(--green)">3</div><div class="vline"></div></div>
+    <div class="card green">
+      <h3>信号层 · 五类缠论买点（47,307 个 BSP 事件）</h3>
+      <div class="body">
+        <b>一类买 T1</b>（趋势背驰）· <b>类一买 T1P</b>（类背驰）· <b>二类买 T2</b>（回抽不破）· <b>类二买 T2S</b> · <b>三类买 T3</b>（中枢上方回抽）<br>
+        每类附框架原生特征：背驰率 divergence_rate / 中枢数 / 笔振幅 / 回抽率 / 中枢高度。
+        买点不做精选——<b>精选个股已被 5 次证伪，全部类型一视同仁</b>。
+      </div>
+      <div class="ev"><b>证据：</b>#1 裸 BSP -6.0bp（裸信号无 edge）· #3/#4/#13/#15 ML 选股阴性</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼</div>
+  <div class="stage">
+    <div class="badge"><div class="num" style="background:var(--green)">4</div><div class="vline"></div></div>
+    <div class="card green">
+      <h3>确认过滤 · 突破信号 bar 高点才入场</h3>
+      <div class="body">信号后 <b>4 根 bar 内</b>价格突破信号 bar 最高价 → 下一根开盘入场（conf_ok，覆盖率约 18%：8,646/47,307）。
+      作用：滤掉"信号一出就继续跌"的失效情形；代价：放弃反转 V 型底的最早一段。</div>
+      <div class="ev"><b>证据：</b>#2 确认入场 +19.9bp vs 裸入场负期望</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼</div>
+  <div class="stage">
+    <div class="badge"><div class="num" style="background:var(--amber)">5</div><div class="vline"></div></div>
+    <div class="card amber">
+      <h3>★ Regime 闸门 · frenzy 狂热指数（本策略唯一的"聪明"）</h3>
+      <div class="body">
+        <b>frenzy5</b> = 样本股中昨日涨幅 &gt;9.5% 的占比，5 日平滑；事件入场用<b>前一交易日</b>值判定（无未来函数）。<br>
+        <b>frenzy5 ≥ 0.00717 → 开机；否则空仓。</b>阈值 = 2020-2023 中位数，2023 年底永久冻结（OOS 零泄漏）。<br>
+        原理：收益来自妖股爆炸（与大盘相关 -0.014，非 beta），而妖股只在投机狂热期成群出现——<b>不开奖的时候不买彩票</b>。
+      </div>
+      <div class="ev"><b>证据：</b>#19 真 OOS 夏普 0.80→1.21 · #20 三年全胜+去尾稳健 · 对照：滚动门控（相对热）夏普 0.21 失败</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼</div>
+  <div class="fork">
+    <div class="card gray">
+      <h3>闸门关闭（60% 时间）</h3>
+      <div class="body"><b>空仓等待。</b>低迷期 E 仅 +39.7bp 且回撤集中——不开仓就是最好的仓位。空仓期现金管理是实盘待答题。</div>
+    </div>
+    <div class="card green">
+      <h3>闸门开启 → 执行层 · 仓位规则</h3>
+      <div class="body">单笔仓位 = 净值 × <b>10%</b>，最多同时 <b>10 只</b>；满仓时新信号跳过（宁缺毋滥的反例：#18 证明过滤信号不如全做）。成本双边 13bp。<br>Kelly 上限 13.4%，实盘建议 1/4 Kelly ≈ 3-4%/笔。</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼</div>
+  <div class="stage">
+    <div class="badge"><div class="num" style="background:var(--green)">6</div><div class="vline"></div></div>
+    <div class="card green">
+      <h3>持有期 · 双出口机械退出（ whichever comes first ）</h3>
+      <div class="body">
+        <b>止损：</b>入场价 − 3×ATR（bar 内最低价触发即走，单笔最大亏损有界）<br>
+        <b>时间：</b>第 <b>144 根 bar</b>（≈18 个交易日）收盘离场——不是魔法数字，96/144/192 是单调平台，本质是"等妖股爆炸的窗口"<br>
+        <b>不做任何其他动作</b>：移动止盈 ❌ 卖点离场 ❌ 结构失效离场 ❌ regime 退出 ❌（全部实验证伪，见下方墓地）
+      </div>
+      <div class="ev"><b>证据：</b>#5 退出网格 · #21 自适应退出两连败 · 旧教训：卖点离场砍赢家（+4.8% vs +8.6%）</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼</div>
+  <div class="stage">
+    <div class="badge"><div class="num" style="background:var(--green)">7</div><div class="vline"></div></div>
+    <div class="card green">
+      <h3>结果 · 低胜率高赔率的尾部收割机</h3>
+      <div class="body">胜率 31.4%（大多数小亏，中位 -242bp），盈亏比 3.8，收益集中在前 5% 交易（去 top5% E 转负）。
+      三个自然年（2024/25/26）门控全胜基线；2024-09 狂潮 10 笔均值 +1984bp。</div>
+      <div class="ev"><b>证据：</b>#8 去尾测试 · #20 分年度稳健性</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 卖点链 ═══════════ -->
+<h2>② 卖点链：产生，但不用于交易（A 股无法做空）</h2>
+<div class="chain">
+  <div class="stage">
+    <div class="badge"><div class="num" style="background:var(--gray)">卖</div><div class="vline"></div></div>
+    <div class="card gray">
+      <h3>五类卖点（一类卖/类一卖/二类卖/类二卖/三类卖）同样逐 bar 产生</h3>
+      <div class="body">
+        <b>信息价值已证实：</b>卖点出现后做空方向统计 +14.8bp/笔（t=5.7）——卖点本身有预测力，但 A 股现货不能做空，无法变现。<br>
+        <b>用作离场？已证伪：</b>卖点信号离场平均 +4.8%/笔 vs 时间退出 +8.6%/笔——卖点在下跌趋势刚启动时触发，而妖股尾部常在"卖点被证伪"后爆发；用卖点离场=系统性砍赢家。<br>
+        <b>当前角色：</b>数据资产与研究对象（卖点可靠性模型 AUC 0.5719），<b>不在交易链路中</b>。
+      </div>
+      <div class="ev"><b>证据：</b>#1 卖点方向统计 · v2 报告卖点离场对照 · WF 卖点模型</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ ML 的角色 ═══════════ -->
+<h2>③ ML 的角色：研究工具，不是交易信号</h2>
+<table>
+  <tr><th style="width:22%">用途</th><th style="width:12%">结论</th><th>证据</th></tr>
+  <tr><td>预测方向（涨/跌）</td><td><span class="tag no">证伪 ×1</span></td><td>AUC 0.487-0.507 ≈ 抛硬币（#3）</td></tr>
+  <tr><td>预测大波动（&gt;2%）</td><td><span class="tag no">证伪 ×2</span></td><td>AUC 0.55-0.57 但与真实持仓收益反相关——标签错配（#4）</td></tr>
+  <tr><td>预测卖点可靠性</td><td><span class="tag no">证伪 ×3</span></td><td>&gt;0 标签 AUC 0.5005（m01355 前后 WF）</td></tr>
+  <tr><td>预测对齐收益（pol144）</td><td><span class="tag no">证伪 ×4</span></td><td>AUC 0.509，高低分位反序（#13）</td></tr>
+  <tr><td>+动力学特征再试</td><td><span class="tag no">证伪 ×5</span></td><td>AUC 0.5073；dy_ 特征训练期 gain 27.8% 但 OOS 零增量=不可外推（#15）</td></tr>
+  <tr><td>预测 BSP 存活（结构标签）</td><td><span class="tag ok">唯一阳性</span></td><td>AUC 买 0.658/卖 0.689，67 个月 100%≥0.55——缠论结构能预测结构（#17）</td></tr>
+  <tr><td>存活模型用于过滤/排序</td><td><span class="tag no">组合级无效</span></td><td>事件级 E 单调升，但组合 +13.4% &lt; 基线 +46.8%——高分事件时间聚集，过滤削减狂潮期暴露（#18）</td></tr>
+</table>
+<div class="note">规律：<b>概率可学、赔率不可学</b>；能外推的是结构属性（存活性），不能外推的是钱（收益由外部资金流决定，入场时无签名）。ML 在本仓库的最终定位：特征体检、假设检验、版本记录的研究基础设施。</div>
+
+<!-- ═══════════ 机制墓地 ═══════════ -->
+<h2>④ 机制墓地：被实验否决的设计（不要重试）</h2>
+<div class="grave">
+  <div class="card red"><h3>❌ 裸 BSP 直接交易</h3><div class="body">-6.0bp/笔，t=-2.5（#1）</div></div>
+  <div class="card red"><h3>❌ 移动止盈（1.5ATR 追踪）</h3><div class="body">盈亏比 3.54→1.84，负优化（#5）</div></div>
+  <div class="card red"><h3>❌ 卖点信号离场</h3><div class="body">+4.8% vs +8.6%，砍赢家（v2）</div></div>
+  <div class="card red"><h3>❌ 结构失效退出（clear_bar）</h3><div class="body">E=-9.3bp，结构确认失败太晚=抱输家（#21）</div></div>
+  <div class="card red"><h3>❌ regime 退出（门控关闭离场）</h3><div class="body">E 14.0 vs 45.3bp，R 1.9——砍赔率（#21）</div></div>
+  <div class="card red"><h3>❌ ML 精选个股/择时过滤</h3><div class="body">5 次阴性 + 组合级否定（#3-#18）</div></div>
+  <div class="card red"><h3>❌ 滚动门控（相对热阈值）</h3><div class="body">夏普 0.21——要绝对热不要相对热（#19 对照）</div></div>
+  <div class="card red"><h3>❌ 短持有 / 超额收益标签 / 3 月训练窗</h3><div class="body">等不到尾部 / 用户否决 / 过拟合（#5/#12）</div></div>
+</div>
+
+<!-- ═══════════ 参数冻结表 ═══════════ -->
+<h2>⑤ 全部冻结参数一览（实盘只需这一页）</h2>
+<table>
+  <tr><th>环节</th><th>参数</th><th>取值</th><th>冻结依据</th></tr>
+  <tr><td>入场信号</td><td>BSP 类型</td><td>五类买点全做（不精选）</td><td>#1/#3 精选无增益</td></tr>
+  <tr><td>入场确认</td><td>确认窗口 / 方式</td><td>4 根 bar 内突破信号 bar 高点，次根开盘入场</td><td>#2</td></tr>
+  <tr><td>regime 闸门</td><td>frenzy5 阈值</td><td><b>0.00717</b>（前一交易日值；2020-2023 中位数，2023 年底冻结）</td><td>#19 真 OOS 验证</td></tr>
+  <tr><td>仓位</td><td>单笔 / 上限</td><td>净值 10% × 最多 10 只（实盘建议降至 3-4% ≈ 1/4 Kelly）</td><td>#19 Kelly 13.4%</td></tr>
+  <tr><td>止损</td><td>距离</td><td>入场价 − 3×ATR（bar 内触发）</td><td>#5 网格</td></tr>
+  <tr><td>时间退出</td><td>持有</td><td>144 bar ≈ 18 交易日，收盘离场</td><td>#5/#21（平台非尖峰）</td></tr>
+  <tr><td>成本</td><td>往返</td><td>13bp</td><td>佣金+印花税+滑点粗估</td></tr>
+  <tr><td>卖点</td><td>—</td><td>不用于离场、不可做空，仅研究</td><td>v2/#1</td></tr>
+</table>
+
+<div class="note">
+  <b>实盘前待答题（诚实清单）：</b>① 60% 空仓期的现金管理（逆回购/货基）；② 夏普 1.21 对应 2.8 年样本、年化 t≈2.0，刚过显著线，建议模拟盘 4 周验证实时管线；
+  ③ 阈值 0.00717 的季度复检（市场结构变化时衰减监控）；④ 本质是尾部游戏——去 top5% 交易 E 转负，连续 100+ 笔不中的心理与资金准备。
+</div>
+
+<div class="footer">chan-quant · reports/strategy_blueprint.html · 证据链入口 reports/experiment_log.md（21 条编号实验）· github.com/RaiderYi/chan-quant</div>
+</div>
+</body>
+</html>
