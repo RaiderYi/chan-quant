@@ -26,11 +26,17 @@ def main():
     ap.add_argument("--holds", default="", help="逗号分隔，给定时逐个持有期做对照")
     ap.add_argument("--stop", type=float, default=3.0)
     ap.add_argument("--jitter", type=int, default=120, help="随机入场相对真实入场的最大偏移 bar")
+    ap.add_argument("--start", default="")
+    ap.add_argument("--end", default="")
     ap.add_argument("--reps", type=int, default=3, help="每个事件抽几个随机对照")
     args = ap.parse_args()
 
     df = train.load(args.name)
     df = df[(df.is_buy == 1) & (df.conf_ok == 1)].copy()
+    if args.start:
+        df = df[df["event_time"] >= args.start]
+    if args.end:
+        df = df[df["event_time"] <= args.end]
     codes = df.code.unique()
     arrays = {c: for_policy(a) for c, a in load_many(codes).items()}
     inds = {c: indicators.precompute(store.load(c)) for c in codes}

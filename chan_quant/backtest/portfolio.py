@@ -138,10 +138,11 @@ def metrics(eq: pd.DataFrame, trades: pd.DataFrame, p: BtParams) -> dict:
     e = eq["equity"]
     ret = e.iloc[-1] / p.capital - 1
     bars = len(e)
-    years = bars / (8 * 242)
-    cagr = (1 + ret) ** (1 / years) - 1 if years > 0 and ret > -1 else np.nan
+    years = (eq.index[-1] - eq.index[0]).days / 365.25 if bars > 1 else np.nan
+    bars_per_year = bars / years if years and years > 0 else 8 * 242
+    cagr = (1 + ret) ** (1 / years) - 1 if years and years > 0 and ret > -1 else np.nan
     r = e.pct_change().dropna()
-    sharpe = r.mean() / r.std() * np.sqrt(8 * 242) if r.std() > 0 else np.nan
+    sharpe = r.mean() / r.std() * np.sqrt(bars_per_year) if r.std() > 0 else np.nan
     dd = (e / e.cummax() - 1).min()
     out = {"total_ret": ret, "cagr": cagr, "sharpe": sharpe, "mdd": dd, "bars": bars}
     if not trades.empty:

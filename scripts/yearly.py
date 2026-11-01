@@ -20,8 +20,9 @@ def main(name: str = "h144_no_signal_exit"):
     ser = pd.Series(ind["close"], index=pd.to_datetime(mdf["time"]))
     mkt = ser.resample("YE").last() / ser.resample("YE").first() - 1
 
-    out = pd.DataFrame({"strategy": yearly.values, "market": mkt.values},
-                       index=[d.year for d in yearly.index])
+    ys = yearly.copy(); ys.index = ys.index.year
+    ms = mkt.copy(); ms.index = ms.index.year
+    out = pd.concat([ys.rename("strategy"), ms.rename("market")], axis=1).dropna()
     out["excess"] = out["strategy"] - out["market"]
     print(out.round(3).to_string())
     print(f"\ncum strategy {eq.iloc[-1]/eq.iloc[0]-1:.1%}  market {ser.iloc[-1]/ser.iloc[0]-1:.1%}")

@@ -48,9 +48,15 @@ def main():
     ap.add_argument("--quantile", type=float, default=0.0, help="只交易分数前 q 分位")
     ap.add_argument("--tag", default="")
     ap.add_argument("--no-signal-exit", action="store_true")
+    ap.add_argument("--start", default="")
+    ap.add_argument("--end", default="")
     args = ap.parse_args()
 
     df = train.load(args.name)
+    if args.start:
+        df = df[df["event_time"] >= args.start]
+    if args.end:
+        df = df[df["event_time"] <= args.end]
     if args.score:
         sc = pd.read_parquet(args.score)
         sc = sc.rename(columns={"event_time": "event_time"})
@@ -60,6 +66,10 @@ def main():
             df = df[df["score"] >= thr]
         print(f"after score filter: {len(df)} events")
     bars = load_frames(df.code.unique())
+    if args.start:
+        bars = {c: b[b["time"] >= args.start] for c, b in bars.items()}
+    if args.end:
+        bars = {c: b[b["time"] <= args.end] for c, b in bars.items()}
     p = portfolio.BtParams(pos_pct=args.pos, max_pos=args.max, stop_atr=args.stop, hold_bars=args.hold,
                            signal_exit=not args.no_signal_exit)
     res = portfolio.run(df, bars, p, entry_mode=args.mode)

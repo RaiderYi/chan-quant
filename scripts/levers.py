@@ -22,9 +22,15 @@ def main():
     ap.add_argument("--holds", default="24,48,72,96")
     ap.add_argument("--stops", default="1.0,1.5,2.0,3.0")
     ap.add_argument("--trails", default="0")
+    ap.add_argument("--start", default="")
+    ap.add_argument("--end", default="")
     args = ap.parse_args()
 
     df = train.load(args.name)
+    if args.start:
+        df = df[df["event_time"] >= args.start]
+    if args.end:
+        df = df[df["event_time"] <= args.end]
     if args.side == "conf_buy":
         df = df[(df.is_buy == 1) & (df.conf_ok == 1)]
         idx_col = "conf_entry_idx"      # 必须用确认后的入场，否则是选择偏差
