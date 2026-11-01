@@ -23,6 +23,7 @@ class BtParams:
     stop_atr: float = 2.0
     hold_bars: int = 24
     cost: float = 0.0013
+    signal_exit: bool = True
 
 
 @dataclass
@@ -86,7 +87,7 @@ def run(events: pd.DataFrame, bars: dict[str, pd.DataFrame], p: BtParams = BtPar
                 exit_price, reason = pos.stop, "stop"
             elif pos.bars_held >= p.hold_bars:
                 exit_price, reason = c, "time"
-            elif t in sell_times.get(code, set()):
+            elif p.signal_exit and t in sell_times.get(code, set()):
                 exit_price, reason = c, "signal"
             if exit_price is not None:
                 cash += pos.shares * exit_price * (1 - p.cost / 2)

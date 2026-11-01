@@ -47,6 +47,7 @@ def main():
     ap.add_argument("--score", default="", help="wf parquet，提供 score 列")
     ap.add_argument("--quantile", type=float, default=0.0, help="只交易分数前 q 分位")
     ap.add_argument("--tag", default="")
+    ap.add_argument("--no-signal-exit", action="store_true")
     args = ap.parse_args()
 
     df = train.load(args.name)
@@ -59,7 +60,8 @@ def main():
             df = df[df["score"] >= thr]
         print(f"after score filter: {len(df)} events")
     bars = load_frames(df.code.unique())
-    p = portfolio.BtParams(pos_pct=args.pos, max_pos=args.max, stop_atr=args.stop, hold_bars=args.hold)
+    p = portfolio.BtParams(pos_pct=args.pos, max_pos=args.max, stop_atr=args.stop, hold_bars=args.hold,
+                           signal_exit=not args.no_signal_exit)
     res = portfolio.run(df, bars, p, entry_mode=args.mode)
     tag = args.tag or f"{args.name}/{args.mode}/stop{args.stop}/hold{args.hold}"
     show(tag, res, save_as=tag.replace("/", "_").replace(" ", "_"))

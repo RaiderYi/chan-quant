@@ -19,10 +19,11 @@ class ExitResult:
 
 def simulate_exit(ind: dict, entry_idx: int, is_buy: int, atr: float,
                   hold: int = DEFAULT_HOLD, stop_atr: float = DEFAULT_STOP_ATR,
-                  cost: float = DEFAULT_COST) -> ExitResult | None:
+                  trail_atr: float = 0.0, cost: float = DEFAULT_COST) -> ExitResult | None:
     """按「入场后先触止损则止损、否则第 hold 根收盘离场」模拟单笔交易。
 
-    ind 需包含 open/high/low/close 四个 numpy 数组。
+    trail_atr > 0 时启用移动止损：用**已收 bar** 的极值更新止损，
+    再在下一根检查是否触发（避免同一根内的未来信息）。
     """
     n = len(ind["close"])
     if entry_idx >= n or entry_idx < 0:
@@ -31,12 +32,22 @@ def simulate_exit(ind: dict, entry_idx: int, is_buy: int, atr: float,
     if entry <= 0:
         return None
     stop = entry - stop_atr * atr if is_buy else entry + stop_atr * atr
+    peak = ind["high"][entry_idx] if is_buy else ind["low"][entry_idx]
     end = min(entry_idx + hold - 1, n - 1)
     for i in range(entry_idx, end + 1):
         if is_buy and ind["low"][i] <= stop:
-            return ExitResult(stop / entry - 1 - cost, i - entry_idx + 1, "stop")
+            return ExitResult(stop / entry - 1 - cost, i - entry_idx + 1,
+                              "trail" if trail_atr > 0 and stop > entry - stop_atr * atr else "stop")
         if (not is_buy) and ind["high"][i] >= stop:
-            return ExitResult(stop / entry - 1 - cost, i - entry_idx + 1, "stop")
+            return ExitResult(stop / entry - 1 - cost, i - entry_idx + 1,
+                              "trail" if trail_atr > 0 and stop < entry + stop_atr * atr else "stop")
+        if trail_atr > 0:
+            if is_buy:
+                peak = max(peak, ind["high"][i])
+                stop = max(stop, peak - trail_atr * atr)
+            else:
+                peak = min(peak, ind["low"][i])
+                stop = min(stop, peak + trail_atr * atr)
     return ExitResult(ind["close"][end] / entry - 1 - cost, end - entry_idx + 1, "time")
 
 

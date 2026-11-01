@@ -21,6 +21,7 @@ def main():
     ap.add_argument("--side", default="conf_buy", choices=["conf_buy", "buy", "all"])
     ap.add_argument("--holds", default="24,48,72,96")
     ap.add_argument("--stops", default="1.0,1.5,2.0,3.0")
+    ap.add_argument("--trails", default="0")
     args = ap.parse_args()
 
     df = train.load(args.name)
@@ -35,20 +36,21 @@ def main():
     arrays = {c: for_policy(a) for c, a in load_many(df.code.unique()).items()}
     holds = [int(x) for x in args.holds.split(",")]
     stops = [float(x) for x in args.stops.split(",")]
+    trails = [float(x) for x in args.trails.split(",")]
     sides = [1] if args.side != "all" else [1, 0]
 
     rows = []
     for side in sides:
         sub = df[df.is_buy == side]
-        for hold, stop in itertools.product(holds, stops):
+        for hold, stop, trail in itertools.product(holds, stops, trails):
             rets = []
             for r in sub.itertuples():
                 res = simulate_exit(arrays[r.code], int(getattr(r, idx_col)), int(r.is_buy), float(r.atr),
-                                    hold=hold, stop_atr=stop)
+                                    hold=hold, stop_atr=stop, trail_atr=trail)
                 if res is not None:
                     rets.append(res.ret if r.is_buy else -res.ret)
             e = expectancy(rets)
-            rows.append({"side": "buy" if side == 1 else "sell", "hold": hold, "stop": stop,
+            rows.append({"side": "buy" if side == 1 else "sell", "hold": hold, "stop": stop, "trail": trail,
                          "n": e["n"], "P": e["win_rate"], "R": e["payoff_R"],
                          "E_bp": e["expectancy_bp"], "R*": e["breakeven_R"], "kelly": e["kelly"]})
     out = pd.DataFrame(rows)
@@ -60,7 +62,7 @@ def main():
     rets = []
     for r in sub.itertuples():
         res = simulate_exit(arrays[r.code], int(getattr(r, idx_col)), int(r.is_buy), float(r.atr),
-                            hold=int(b["hold"]), stop_atr=float(b["stop"]))
+                            hold=int(b["hold"]), stop_atr=float(b["stop"]), trail_atr=float(b["trail"]))
         if res is not None:
             rets.append(res.ret if r.is_buy else -res.ret)
     e = expectancy(rets)
