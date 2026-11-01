@@ -48,6 +48,8 @@ def main():
     ap.add_argument("--quantile", type=float, default=0.0, help="只交易分数前 q 分位")
     ap.add_argument("--tag", default="")
     ap.add_argument("--no-signal-exit", action="store_true")
+    ap.add_argument("--sell-score", default="", help="卖点可靠性 wf parquet")
+    ap.add_argument("--sell-quantile", type=float, default=0.0)
     ap.add_argument("--start", default="")
     ap.add_argument("--end", default="")
     args = ap.parse_args()
@@ -60,11 +62,19 @@ def main():
     if args.score:
         sc = pd.read_parquet(args.score)
         sc = sc.rename(columns={"event_time": "event_time"})
-        df = df.merge(sc[["code", "event_time", "score"]], on=["code", "event_time"], how="inner")
+        df = df.merge(sc[["code", "event_time", "score"]], on=["code", "event_time"], how="left")
         if args.quantile > 0:
-            thr = df.groupby("is_buy")["score"].transform(lambda s: s.quantile(1 - args.quantile))
-            df = df[df["score"] >= thr]
+            thr = df.loc[df.is_buy == 1, "score"].quantile(1 - args.quantile)
+            df = df[(df.is_buy == 0) | (df["score"] >= thr)]
         print(f"after score filter: {len(df)} events")
+    if args.sell_score:
+        sc = pd.read_parquet(args.sell_score)[["code", "event_time", "score"]]
+        base = df.drop(columns=["score"]) if "score" in df.columns else df
+        sells = base[base.is_buy == 0].merge(sc, on=["code", "event_time"], how="inner")
+        thr = sells["score"].quantile(args.sell_quantile) if args.sell_quantile > 0 else -1.0
+        keep = sells[sells["score"] >= thr].drop(columns=["score"])
+        df = pd.concat([df[df.is_buy == 1], keep], ignore_index=True)
+        print(f"sell gating: {len(keep)}/{len(sells)} sells kept (q={args.sell_quantile})")
     bars = load_frames(df.code.unique())
     if args.start:
         bars = {c: b[b["time"] >= args.start] for c, b in bars.items()}

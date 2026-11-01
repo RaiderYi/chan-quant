@@ -50,6 +50,8 @@ def run(events: pd.DataFrame, bars: dict[str, pd.DataFrame], p: BtParams = BtPar
         ev["entry_price"] = ev["conf_entry_price"]
         ev["atr"] = ev["conf_atr"]
     ev["entry_time"] = pd.to_datetime(ev[date_col] if entry_mode != "confirm" else ev["entry_time"])
+    if "score" in ev.columns:
+        ev = ev.sort_values(["entry_time", "score"], ascending=[True, False])
     sell_times = {}
     for r in events[events["is_buy"] == 0].itertuples():
         sell_times.setdefault(r.code, set()).add(pd.Timestamp(getattr(r, date_col)))

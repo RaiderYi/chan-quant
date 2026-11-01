@@ -22,6 +22,8 @@ H = 24
 def _subset(df, name):
     if name == "buy":
         return df[df.is_buy == 1]
+    if name == "sell":
+        return df[df.is_buy == 0]
     if name == "conf_buy":
         return df[(df.is_buy == 1) & (df.conf_ok == 1)]
     if name == "conf_all":
@@ -30,7 +32,7 @@ def _subset(df, name):
 
 
 def run(name="events_v1", out="wf_v1", label="pol_dir_ret", subset="all",
-        min_train=1500, matures_days=10, min_pos=0.05, thr=0.0):
+        min_train=1500, matures_days=10, min_pos=0.05, thr=0.0, window_months=0):
     df = _subset(train.load(name), subset).copy()
     df["t"] = pd.to_datetime(df["event_time"])
     df = df.sort_values("t").reset_index(drop=True)
@@ -40,11 +42,14 @@ def run(name="events_v1", out="wf_v1", label="pol_dir_ret", subset="all",
     print(f"events={len(df)} pos={y.mean():.3f} features={len(cols)}")
 
     months = pd.period_range(df["t"].min().to_period("M") + 12, df["t"].max().to_period("M"), freq="M")
-    preds, last = [], None
+    preds, last, imp_rows = [], None, []
     for m in months:
         start = m.start_time
         cut = start - pd.Timedelta(days=matures_days)
-        tr = df["t"] <= cut
+        if window_months > 0:
+            tr = (df["t"] <= cut) & (df["t"] > cut - pd.DateOffset(months=window_months))
+        else:
+            tr = df["t"] <= cut
         te = (df["t"] >= start) & (df["t"] < m.end_time + pd.Timedelta(days=1))
         if tr.sum() < min_train or te.sum() < 5:
             continue
@@ -53,6 +58,8 @@ def run(name="events_v1", out="wf_v1", label="pol_dir_ret", subset="all",
             continue
         keep = [c for c in cols if X.loc[tr, c].nunique(dropna=True) > 1]
         bst = train.fit_xgb(X.loc[tr, keep], ytr, X.loc[tr, keep], ytr, rounds=120)
+        for fn_, g_ in bst.get_score(importance_type="gain").items():
+            imp_rows.append({"month": str(m), "feature": fn_, "gain": g_})
         p = bst.predict(__import__("xgboost").DMatrix(X.loc[te, keep]))
         sub = df.loc[te, ["code", "event_time", "bsp_type", "is_buy", "delay_bars",
                           label, "dir_ret_24", "ret_24"]].copy()
@@ -68,6 +75,10 @@ def run(name="events_v1", out="wf_v1", label="pol_dir_ret", subset="all",
     p = str(MODELS.parent / "events" / f"{out}.parquet")
     out_df.to_parquet(p, index=False)
     print(f"saved {p} rows={len(out_df)}")
+    if imp_rows:
+        ip = str(MODELS.parent / "events" / f"{out}_importance.parquet")
+        pd.DataFrame(imp_rows).to_parquet(ip, index=False)
+        print(f"saved importance -> {ip}")
     if last:
         bst, keep = last
         bst.save_model(str(MODELS / "latest.json"))
@@ -100,6 +111,22 @@ def evaluate(df, label="pol_dir_ret", thr=0.0):
                              "bot20_bp": st[st.score <= st.score.quantile(0.2)][label].mean() * 1e4,
                              "top20_win": (st[st.score >= st.score.quantile(0.8)][label] > 0).mean()})
     print(pd.DataFrame(rows).round(4).to_string(index=False))
+    monthly_auc(df, label, thr)
+
+
+def monthly_auc(df, label, thr):
+    from chan_quant.models.train import auc
+    rows = []
+    for m, g in df.groupby("month"):
+        y = (g[label] > thr).astype(int)
+        if y.nunique() > 1 and len(g) >= 10:
+            rows.append({"month": m, "n": len(g), "auc": auc(y, g["score"])})
+    if not rows:
+        return
+    a = pd.DataFrame(rows)
+    print(f"\n逐月 AUC: mean={a.auc.mean():.4f}  std={a.auc.std():.4f}  min={a.auc.min():.4f}  "
+          f">=0.55 占比 {(a.auc >= 0.55).mean()*100:.0f}%  ({len(a)} 个月)")
+    a.to_csv(str(MODELS.parent / "events" / "monthly_auc.csv"), index=False)
 
 
 if __name__ == "__main__":
@@ -110,6 +137,7 @@ if __name__ == "__main__":
     subset = a[3] if len(a) > 3 else "all"
     mt = int(a[4]) if len(a) > 4 else 1500
     thr = float(a[5]) if len(a) > 5 else 0.0
-    d = run(name, out, label, subset, min_train=mt, thr=thr)
+    win = int(a[6]) if len(a) > 6 else 0
+    d = run(name, out, label, subset, min_train=mt, thr=thr, window_months=win)
     if d is not None:
         evaluate(d, label, thr)

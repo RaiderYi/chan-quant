@@ -42,4 +42,5 @@ def chan_config(trigger_step: bool = True, bs_type: str = "1,1p,2,2s,3a,3b"):
         "bsp2s_follow_2": False,
         "max_bs2_rate": 0.9999,
         "kl_data_check": False,
+        "cal_rsi": True,  # dynamics 特征的 RSI 笔度量需要 klu.rsi（不影响 BSP 判定）
     })

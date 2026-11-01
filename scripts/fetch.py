@@ -65,40 +65,45 @@ def main():
     ap.add_argument("--start", default="2016-01-01")
     ap.add_argument("--end", default="2026-10-31")
     ap.add_argument("--codes", default="")
+    ap.add_argument("--freq", default="30m", choices=["30m", "d"], help="d=日线")
     ap.add_argument("--sleep", type=float, default=0.6, help="每只股票之间的休眠秒数")
     args = ap.parse_args()
 
+    fetch_fn = fetch.fetch_daily if args.freq == "d" else fetch.fetch_30m
     acquire_lock()
     try:
         codes = args.codes.split(",") if args.codes else universe()
-        todo = [c for c in codes if not store.has(c, "30m")]
-        print(f"universe={len(codes)} todo={len(todo)}", flush=True)
+        todo = [c for c in codes if not store.has(c, args.freq)]
+        print(f"universe={len(codes)} todo={len(todo)} freq={args.freq}", flush=True)
 
         ok = fail = 0
         t0 = time.time()
         logged = False
+        backoff = [60, 180]   # 服务端断开(10054)后给它恢复时间再重试
         for i, code in enumerate(todo, 1):
-            for attempt in range(2):
+            for attempt in range(3):
                 try:
                     if not logged:
                         fetch.login()
                         logged = True
-                    df = fetch.fetch_30m(code, args.start, args.end)
+                    df = fetch_fn(code, args.start, args.end)
                     if len(df) < 500:
                         print(f"[{i}/{len(todo)}] {code} short={len(df)}", flush=True)
                         fail += 1
                         break
-                    store.save(code, df, "30m")
+                    store.save(code, df, args.freq)
                     ok += 1
                     print(f"[{i}/{len(todo)}] {code} {len(df)}", flush=True)
                     break
                 except Exception as e:
                     logged = False
-                    if attempt == 1:
+                    fetch.logout()
+                    if attempt == 2:
                         fail += 1
                         print(f"[{i}/{len(todo)}] {code} FAIL {type(e).__name__}", flush=True)
                     else:
-                        time.sleep(2)
+                        print(f"  {code} {type(e).__name__}, {backoff[attempt]}s 后重试", flush=True)
+                        time.sleep(backoff[attempt])
             time.sleep(args.sleep)
             if i % 20 == 0:
                 print(f"--- {i}/{len(todo)} ok={ok} fail={fail} {(time.time()-t0)/60:.1f}min",
