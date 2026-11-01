@@ -1,0 +1,115 @@
+"""月度 Walk-Forward：扩展窗口训练，逐月 OOF 预测。
+
+用法:
+  python train_wf.py <dataset> <out> [label_col] [subset]
+  subset: all | buy | conf_buy | conf_all
+"""
+import json
+import sys
+from pathlib import Path as _Path
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+import numpy as np
+import pandas as pd
+
+from chan_quant.config import MODELS
+from chan_quant.features import schema
+from chan_quant.models import train
+
+H = 24
+
+
+def _subset(df, name):
+    if name == "buy":
+        return df[df.is_buy == 1]
+    if name == "conf_buy":
+        return df[(df.is_buy == 1) & (df.conf_ok == 1)]
+    if name == "conf_all":
+        return df[df.conf_ok == 1]
+    return df
+
+
+def run(name="events_v1", out="wf_v1", label="pol_dir_ret", subset="all",
+        min_train=1500, matures_days=10, min_pos=0.05, thr=0.0):
+    df = _subset(train.load(name), subset).copy()
+    df["t"] = pd.to_datetime(df["event_time"])
+    df = df.sort_values("t").reset_index(drop=True)
+    y = (df[label] > thr).astype(int).to_numpy()
+    cols = [c for c in schema.load() if c in df.columns]
+    X = df[cols].astype(float).replace([np.inf, -np.inf], np.nan)
+    print(f"events={len(df)} pos={y.mean():.3f} features={len(cols)}")
+
+    months = pd.period_range(df["t"].min().to_period("M") + 12, df["t"].max().to_period("M"), freq="M")
+    preds, last = [], None
+    for m in months:
+        start = m.start_time
+        cut = start - pd.Timedelta(days=matures_days)
+        tr = df["t"] <= cut
+        te = (df["t"] >= start) & (df["t"] < m.end_time + pd.Timedelta(days=1))
+        if tr.sum() < min_train or te.sum() < 5:
+            continue
+        ytr = y[tr]
+        if ytr.mean() < min_pos or ytr.mean() > 1 - min_pos:
+            continue
+        keep = [c for c in cols if X.loc[tr, c].nunique(dropna=True) > 1]
+        bst = train.fit_xgb(X.loc[tr, keep], ytr, X.loc[tr, keep], ytr, rounds=120)
+        p = bst.predict(__import__("xgboost").DMatrix(X.loc[te, keep]))
+        sub = df.loc[te, ["code", "event_time", "bsp_type", "is_buy", "delay_bars",
+                          label, "dir_ret_24", "ret_24"]].copy()
+        sub["score"] = p
+        sub["month"] = str(m)
+        preds.append(sub)
+        last = (bst, keep)
+
+    if not preds:
+        print("no predictions")
+        return None
+    out_df = pd.concat(preds, ignore_index=True)
+    p = str(MODELS.parent / "events" / f"{out}.parquet")
+    out_df.to_parquet(p, index=False)
+    print(f"saved {p} rows={len(out_df)}")
+    if last:
+        bst, keep = last
+        bst.save_model(str(MODELS / "latest.json"))
+        json.dump(keep, open(MODELS / "latest_features.json", "w"))
+    return out_df
+
+
+def evaluate(df, label="pol_dir_ret", thr=0.0):
+    from chan_quant.models.train import auc
+    print("\n## OOF 评估")
+    rows = []
+    for side, sd in ((1, "BUY"), (0, "SELL")):
+        s = df[df.is_buy == side]
+        if len(s) < 50:
+            continue
+        y = (s[label] > thr).astype(int)
+        hs = s[s.score >= s.score.quantile(0.8)][label]
+        ls = s[s.score <= s.score.quantile(0.2)][label]
+        rows.append({"group": sd, "n": len(s), "auc": auc(y, s.score),
+                     "base": y.mean(), "top20_bp": hs.mean() * 1e4,
+                     "bot20_bp": ls.mean() * 1e4,
+                     "top20_win": (hs > 0).mean()})
+        for t in ("1", "1p", "2", "2s", "3a"):
+            st = s[s.bsp_type.str.split(",").apply(lambda xs: t in xs)]
+            if len(st) >= 100:
+                yt = (st[label] > thr).astype(int)
+                rows.append({"group": f"{sd}_{t}", "n": len(st),
+                             "auc": auc(yt, st.score), "base": yt.mean(),
+                             "top20_bp": st[st.score >= st.score.quantile(0.8)][label].mean() * 1e4,
+                             "bot20_bp": st[st.score <= st.score.quantile(0.2)][label].mean() * 1e4,
+                             "top20_win": (st[st.score >= st.score.quantile(0.8)][label] > 0).mean()})
+    print(pd.DataFrame(rows).round(4).to_string(index=False))
+
+
+if __name__ == "__main__":
+    a = sys.argv[1:]
+    name = a[0] if len(a) > 0 else "events_v1"
+    out = a[1] if len(a) > 1 else "wf_v1"
+    label = a[2] if len(a) > 2 else "pol_dir_ret"
+    subset = a[3] if len(a) > 3 else "all"
+    mt = int(a[4]) if len(a) > 4 else 1500
+    thr = float(a[5]) if len(a) > 5 else 0.0
+    d = run(name, out, label, subset, min_train=mt, thr=thr)
+    if d is not None:
+        evaluate(d, label, thr)

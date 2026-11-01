@@ -1,0 +1,18 @@
+# 运行产物与第三方代码
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 数据（体积大，用脚本重建）
+data/
+logs/
+*.parquet
+
+# 第三方仓库（setup 脚本拉取 / 只读参考）
+framework/
+refs/
+
+# 本机杂项
+.DS_Store
+Thumbs.db
