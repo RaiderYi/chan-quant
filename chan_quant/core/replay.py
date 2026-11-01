@@ -24,6 +24,7 @@ class Event:
     entry_time: str
     entry_price: float    # 下一根 bar 开盘价
     features: dict
+    clear_bar: int = -1   # BSP 从 bs_point_lst 消失的 bar；-1=回放结束仍存活
 
 
 def _log(msg: str):
@@ -41,13 +42,15 @@ def replay(code: str, freq: str = "30m", max_bsp_lookback: int = 8,
     times = df["time"].dt.strftime("%Y-%m-%d %H:%M").to_numpy()
     opens = ind["open"]
 
-    lv_map = {"30m": KL_TYPE.K_30M, "day": KL_TYPE.K_DAY, "5m": KL_TYPE.K_5M, "60m": KL_TYPE.K_60M}
+    lv_map = {"30m": KL_TYPE.K_30M, "d": KL_TYPE.K_DAY, "day": KL_TYPE.K_DAY,
+              "5m": KL_TYPE.K_5M, "60m": KL_TYPE.K_60M}
     chan = CChan(code=code, data_src="custom:LocalStore.CLocalStore",
                  lv_list=[lv_map[freq]], config=chan_config(trigger_step=True),
                  autype=AUTYPE.QFQ)
 
     seen = set()
     events = []
+    alive: dict[int, list[int]] = {}  # bi_idx -> 该笔上已记录事件的索引（存活追踪）
     n_bar = 0
     skipped = 0
     t0 = time.time()
@@ -59,6 +62,17 @@ def replay(code: str, freq: str = "30m", max_bsp_lookback: int = 8,
         n_bar += 1
         if t < warmup:
             continue
+
+        # 存活追踪：bi 级 BSP 从 bsp_store_flat_dict 消失 = 失效（clear_store_end 只删未确认段）
+        if alive:
+            try:
+                current = {b.bi.idx for b in lv.bs_point_lst.bsp_store_flat_dict.values()}
+            except Exception:
+                current = None
+            if current is not None:
+                for bi_idx in [k for k in alive if k not in current]:
+                    for ei in alive.pop(bi_idx):
+                        events[ei].clear_bar = t
 
         try:
             latest = lv.bs_point_lst.get_latest_bsp(max_bsp_lookback)
@@ -98,6 +112,7 @@ def replay(code: str, freq: str = "30m", max_bsp_lookback: int = 8,
                 features=feats,
             )
             events.append(ev)
+            alive.setdefault(bsp.bi.idx, []).append(len(events) - 1)
 
     elapsed = time.time() - t0
     if verbose:

@@ -16,9 +16,10 @@ from chan_quant.models import train
 
 HOLD, STOP = 144, 3.0
 NAME = sys.argv[1] if len(sys.argv) > 1 else "events_v6"
+FREQ = sys.argv[2] if len(sys.argv) > 2 else "30m"
 
 df = train.load(NAME)
-arrays = {c: for_policy(a) for c, a in load_many(df.code.unique()).items()}
+arrays = {c: for_policy(a) for c, a in load_many(df.code.unique(), FREQ).items()}
 
 rets = []
 for r in df.itertuples():

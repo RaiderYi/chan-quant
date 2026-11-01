@@ -37,6 +37,7 @@ def build(codes, freq: str = "30m", warmup: int = 200, verbose: bool = True,
                 "bsp_bi_idx": e.bsp_bi_idx, "bsp_type": e.bsp_type, "is_buy": e.is_buy,
                 "bsp_klu_idx": e.bsp_klu_idx, "delay_bars": e.delay_bars,
                 "entry_idx": e.entry_idx, "entry_time": e.entry_time, "entry_price": e.entry_price,
+                "clear_bar": e.clear_bar,
                 "atr": float(ind["atr14"][e.bar_idx]) if ind["atr14"][e.bar_idx] == ind["atr14"][e.bar_idx] else 0.0,
             }
             r.update(e.features)

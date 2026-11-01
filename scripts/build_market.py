@@ -37,5 +37,9 @@ def build_market(freq: str = "30m", min_stocks: int = 30, out_code: str = "_MARK
 
 
 if __name__ == "__main__":
-    df = build_market()
-    print("market bars", len(df), df["time"].min(), df["time"].max())
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--freq", default="30m")
+    args = ap.parse_args()
+    df = build_market(args.freq)
+    print(f"market bars[{args.freq}]", len(df), df["time"].min(), df["time"].max())

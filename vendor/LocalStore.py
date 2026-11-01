@@ -15,7 +15,7 @@ from .CommonStockAPI import CCommonStockApi
 
 FREQ = {
     "K_1M": "1m", "K_5M": "5m", "K_15M": "15m", "K_30M": "30m",
-    "K_60M": "60m", "K_DAY": "day", "K_WEEK": "week", "K_MONTH": "month",
+    "K_60M": "60m", "K_DAY": "d", "K_WEEK": "week", "K_MONTH": "month",
 }
 _DEFAULT_BARS = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "bars"))
 BARS_ROOT = os.environ.get("CHAN_QUANT_BARS", _DEFAULT_BARS)
