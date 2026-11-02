@@ -19,7 +19,7 @@ def build(codes, freq: str = "30m", warmup: int = 200, verbose: bool = True,
     rows, feats_cols, stats = [], set(), []
     failed = []
     for code in codes:
-        if not store.has(code, freq):
+        if code.startswith("_") or not store.has(code, freq):
             continue
         try:
             events, elapsed = replay.replay(code, freq, warmup=warmup)

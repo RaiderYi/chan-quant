@@ -24,11 +24,17 @@ def build_market(freq: str = "30m", min_stocks: int = 30, out_code: str = "_MARK
     level = level[cnt >= min_stocks]
     ret = level.pct_change().fillna(0)
     close = 1000 * (1 + ret).cumprod()
+    op = close.shift(1).fillna(close.iloc[0])
+    hi = close * (1 + ret.abs().rolling(3).mean().fillna(0).values * 0.3)
+    lo = close * (1 - ret.abs().rolling(3).mean().fillna(0).values * 0.3)
+    # 合成序列必须满足 high>=max(open,close)、low<=min(open,close)，否则过不了框架校验
+    hi = np.maximum(hi, np.maximum(op, close))
+    lo = np.minimum(lo, np.minimum(op, close))
     df = pd.DataFrame({
         "time": close.index,
-        "open": close.shift(1).fillna(close.iloc[0]).values,
-        "high": close.values * (1 + ret.abs().rolling(3).mean().fillna(0).values * 0.3),
-        "low": close.values * (1 - ret.abs().rolling(3).mean().fillna(0).values * 0.3),
+        "open": op.values,
+        "high": hi.values,
+        "low": lo.values,
         "close": close.values,
         "volume": 0.0,
     })
@@ -40,6 +46,7 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--freq", default="30m")
+    ap.add_argument("--min-stocks", type=int, default=30)
     args = ap.parse_args()
-    df = build_market(args.freq)
+    df = build_market(args.freq, min_stocks=args.min_stocks)
     print(f"market bars[{args.freq}]", len(df), df["time"].min(), df["time"].max())

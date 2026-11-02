@@ -17,6 +17,8 @@ from chan_quant.models import train
 HOLD, STOP = 144, 3.0
 NAME = sys.argv[1] if len(sys.argv) > 1 else "events_v6"
 FREQ = sys.argv[2] if len(sys.argv) > 2 else "30m"
+# 成本：A股 13bp（默认）；加密 taker 往返 10bp+滑点 2bp=12bp，用第三参数传入
+COST = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0013
 
 df = train.load(NAME)
 arrays = {c: for_policy(a) for c, a in load_many(df.code.unique(), FREQ).items()}
@@ -25,7 +27,7 @@ rets = []
 for r in df.itertuples():
     if r.is_buy == 1 and r.conf_ok == 1:
         res = simulate_exit(arrays[r.code], int(r.conf_entry_idx), 1, float(r.atr),
-                            hold=HOLD, stop_atr=STOP, trail_atr=0.0)
+                            hold=HOLD, stop_atr=STOP, trail_atr=0.0, cost=COST)
         rets.append(res.ret if res is not None else np.nan)
     else:
         rets.append(np.nan)

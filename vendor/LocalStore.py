@@ -61,7 +61,9 @@ class CLocalStore(CCommonStockApi):
         for r in df.itertuples(index=False):
             t = r.time
             yield CKLine_Unit({
-                DATA_FIELD.FIELD_TIME: CTime(t.year, t.month, t.day, t.hour, t.minute),
+                # auto=False：否则 00:00 的 bar 会被当成日级 K 线（ts 变 23:59），
+                # 加密 24/7 数据有真实午夜 bar，会触发 "kline time err"
+                DATA_FIELD.FIELD_TIME: CTime(t.year, t.month, t.day, t.hour, t.minute, auto=False),
                 DATA_FIELD.FIELD_OPEN: float(r.open),
                 DATA_FIELD.FIELD_HIGH: float(r.high),
                 DATA_FIELD.FIELD_LOW: float(r.low),
