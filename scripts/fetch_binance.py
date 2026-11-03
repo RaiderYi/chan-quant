@@ -30,7 +30,7 @@ import pandas as pd
 from chan_quant.data import store
 
 PROXY = "http://127.0.0.1:7890"
-BASE = "https://data.binance.vision/data/futures/um/monthly/klines/{sym}/30m/{sym}-30m-{ym}.zip"
+BASE = "https://data.binance.vision/data/futures/um/monthly/klines/{sym}/{freq}/{sym}-{freq}-{ym}.zip"
 
 # 高流动性、长历史的 U 本位永续（上市月均 >= 2020-09）
 UNIVERSE = [
@@ -47,9 +47,9 @@ _opener = urllib.request.build_opener(
 _opener.addheaders = [("User-Agent", "Mozilla/5.0")]
 
 
-def fetch_month(sym: str, ym: str) -> pd.DataFrame | None:
+def fetch_month(sym: str, ym: str, freq: str) -> pd.DataFrame | None:
     """返回该月 K 线；404 返回 None；其他错误抛异常。"""
-    url = BASE.format(sym=sym, ym=ym)
+    url = BASE.format(sym=sym, ym=ym, freq=freq)
     try:
         raw = _opener.open(url, timeout=30).read()
     except urllib.error.HTTPError as e:
@@ -82,23 +82,25 @@ def main():
     ap.add_argument("--start", default="2019-09")
     ap.add_argument("--end", default="2026-10")
     ap.add_argument("--sleep", type=float, default=0.15)
+    ap.add_argument("--freq", default="30m")
     ap.add_argument("--symbols", default="", help="comma separated, default all")
     args = ap.parse_args()
+    freq = args.freq
 
     universe = args.symbols.split(",") if args.symbols else UNIVERSE
     yms = [f"{p.year}-{p.month:02d}" for p in pd.period_range(args.start, args.end, freq="M")]
-    print(f"universe={len(universe)} months={len(yms)}", flush=True)
+    print(f"universe={len(universe)} months={len(yms)} freq={freq}", flush=True)
 
     ok = fail = 0
     for si, sym in enumerate(universe, 1):
-        if store.has(sym, "30m"):
+        if store.has(sym, freq):
             print(f"[{si}/{len(universe)}] {sym} exists, skip", flush=True)
             continue
         parts = []
         for ym in yms:
             for attempt in (0, 1, 2):
                 try:
-                    df = fetch_month(sym, ym)
+                    df = fetch_month(sym, ym, freq)
                     break
                 except Exception as e:
                     print(f"  {sym} {ym} attempt{attempt} ERR {type(e).__name__}: {e}", flush=True)
@@ -112,7 +114,7 @@ def main():
             time.sleep(args.sleep)
         if parts:
             all_df = pd.concat(parts, ignore_index=True)
-            store.save(sym, all_df, "30m")
+            store.save(sym, all_df, freq)
             ok += 1
             print(f"[{si}/{len(UNIVERSE)}] {sym} bars={len(all_df)} "
                   f"{all_df.time.iloc[0]} ~ {all_df.time.iloc[-1]}", flush=True)
