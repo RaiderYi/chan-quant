@@ -1,10 +1,15 @@
 """标签：前向收益 / 最大有利不利偏移 / 止损命中，全部在入场后计算。
 
-统一口径：
+统一口径（2026-11-03 修正，台账 #37）：
 - 入场价 = 决策 bar 下一根的开盘价
 - 持有 H 根，第 H 根收盘离场
-- 成本 = 单边费率 × 2（默认 10bps + 印花税，按往返 13bps 计）
-- dir_ret = 买点取多头收益，卖点取反向收益（信号一致性）
+- 成本 = 往返费率（默认 13bps），多空两侧都**扣除**
+  （旧版 bug：卖侧 dir_ret = -q+c，高估 2c≈26bp）
+- dir_ret = 买点取多头净收益，卖点取 -(价差收益)-成本
+- mfe/mae 为物理有利/不利偏移：mfe≥0（买=向上/卖=向下的最大幅度），
+  mae≤0（买=向下/卖=向上的最大幅度）
+  （旧版 bug：卖侧 mfe/mae 符号写反）
+- 数据末端不足 H 根 → 该档 5 个键全部 NaN（删失，不伪造完整标签）
 """
 import numpy as np
 
@@ -25,24 +30,20 @@ def forward_labels(ind: dict, entry_idx: int, is_buy: int, atr: float,
     stop_dist = stop_atr * atr / entry if entry > 0 else 0.0
 
     for H in horizons:
-        end = min(entry_idx + H - 1, n - 1)
-        if end < entry_idx:
-            out[f"ret_{H}"] = np.nan
-            out[f"dir_ret_{H}"] = np.nan
-            out[f"mfe_{H}"] = np.nan
-            out[f"mae_{H}"] = np.nan
-            out[f"stop_{H}"] = np.nan
+        full_end = entry_idx + H - 1
+        end = min(full_end, n - 1)
+        if end < entry_idx or end < full_end:   # 删失：观察窗不完整
+            for k in ("ret", "dir_ret", "mfe", "mae", "stop"):
+                out[f"{k}_{H}"] = np.nan
             continue
         hi = ind["high"][entry_idx:end + 1].max()
         lo = ind["low"][entry_idx:end + 1].min()
         close = ind["close"][end]
-        ret = close / entry - 1.0 - cost
-        mfe = sign * (hi / entry - 1.0) if is_buy else sign * (1.0 - lo / entry)
-        mae = sign * (lo / entry - 1.0) if is_buy else sign * (1.0 - hi / entry)
+        q = close / entry - 1.0                 # 多头视角价差收益
+        out[f"ret_{H}"] = q - cost
+        out[f"dir_ret_{H}"] = sign * q - cost
+        out[f"mfe_{H}"] = (hi / entry - 1.0) if is_buy else (1.0 - lo / entry)
+        out[f"mae_{H}"] = (lo / entry - 1.0) if is_buy else -(hi / entry - 1.0)
         hit = (lo <= entry * (1 - stop_dist)) if is_buy else (hi >= entry * (1 + stop_dist))
-        out[f"ret_{H}"] = ret
-        out[f"dir_ret_{H}"] = sign * ret
-        out[f"mfe_{H}"] = mfe
-        out[f"mae_{H}"] = mae
         out[f"stop_{H}"] = 1.0 if hit else 0.0
     return out

@@ -32,10 +32,13 @@ def _subset(df, name):
 
 
 def run(name="events_v1", out="wf_v1", label="pol_dir_ret", subset="all",
-        min_train=1500, matures_days=10, min_pos=0.05, thr=0.0, window_months=0):
+        min_train=1500, matures_days=28, min_pos=0.05, thr=0.0, window_months=0):
+    # matures_days：训练截点与测试月的隔离天数。144bar 标签（30m≈18 交易日≈26 日历日）
+    # 需 ≥28 天才保证训练标签在预测时点前已成熟（旧默认 10 天不够，台账 #37）。
     df = _subset(train.load(name), subset).copy()
     df["t"] = pd.to_datetime(df["event_time"])
     df = df.sort_values("t").reset_index(drop=True)
+    df = df[pd.notna(df[label])]          # NaN 标签剔除（旧版被当负类）
     y = (df[label] > thr).astype(int).to_numpy()
     cols = [c for c in schema.load() if c in df.columns]
     X = df[cols].astype(float).replace([np.inf, -np.inf], np.nan)
@@ -50,17 +53,27 @@ def run(name="events_v1", out="wf_v1", label="pol_dir_ret", subset="all",
             tr = (df["t"] <= cut) & (df["t"] > cut - pd.DateOffset(months=window_months))
         else:
             tr = df["t"] <= cut
-        te = (df["t"] >= start) & (df["t"] < m.end_time + pd.Timedelta(days=1))
+        nxt = (m + 1).start_time
+        te = (df["t"] >= start) & (df["t"] < nxt)   # 只含本月（旧版 end_time+1day 会重复计入次月 1 日）
         if tr.sum() < min_train or te.sum() < 5:
             continue
-        ytr = y[tr]
-        if ytr.mean() < min_pos or ytr.mean() > 1 - min_pos:
+        pos_all = np.flatnonzero(tr.to_numpy())
+        if y[pos_all].mean() < min_pos or y[pos_all].mean() > 1 - min_pos:
             continue
-        keep = [c for c in cols if X.loc[tr, c].nunique(dropna=True) > 1]
-        bst = train.fit_xgb(X.loc[tr, keep], ytr, X.loc[tr, keep], ytr, rounds=120)
+        # 独立时间验证集：训练窗末段 15%（旧版把训练集同时当验证集 → 训练集上早停）
+        vsplit = int(len(pos_all) * 0.85)
+        ptr, pva = pos_all[:vsplit], pos_all[vsplit:]
+        if len(pva) < 10:
+            ptr, pva = pos_all, pos_all[:max(1, len(pos_all) // 10)]
+        keep = [c for c in cols if X.iloc[ptr][c].nunique(dropna=True) > 1]
+        bst = train.fit_xgb(X.iloc[ptr][keep], y[ptr], X.iloc[pva][keep], y[pva], rounds=120)
         for fn_, g_ in bst.get_score(importance_type="gain").items():
             imp_rows.append({"month": str(m), "feature": fn_, "gain": g_})
-        p = bst.predict(__import__("xgboost").DMatrix(X.loc[te, keep]))
+        bi = getattr(bst, "best_iteration", None)
+        it_rng = (0, bi + 1) if bi is not None else None
+        te_pos = np.flatnonzero(te.to_numpy())
+        dm = __import__("xgboost").DMatrix(X.iloc[te_pos][keep])
+        p = bst.predict(dm, iteration_range=it_rng) if it_rng else bst.predict(dm)
         sub = df.loc[te, ["code", "event_time", "bsp_type", "is_buy", "delay_bars",
                           label, "dir_ret_24", "ret_24"]].copy()
         sub["score"] = p
